@@ -1,0 +1,115 @@
+from __future__ import division
+import random
+import math
+
+
+def sigmoid(value):
+    if value<=-705:
+        return sigmoid(-704)
+    else:
+        return 1 / (1 + (math.exp(-value)))
+
+def deriv_sigmoid(value):
+    return(value*(1-value))
+
+
+
+#editable stuff
+n_inputs = 2
+n_outputs = 2
+n_mesh_neurons = 6 #number of neurons that are not inputs or outputs
+learning_rate = .001
+weight_penalty_rate = .2
+n_steps = 1000000
+n_back_steps = 3
+n_in_connections = 2
+n_out_connections = 2
+
+
+
+class Neuron(object):
+    def __init__(self,in_connections,out_connections,index):
+        self.in_connnections = in_connections #list of neuron indices that feed into neuron
+        self.out_connections = out_connections #list of neuron indices that neuron feeds into
+        self.out_weights = [(random.random()*2)-1 for weight in range(len(out_connections))]
+        self.bias = (random.random()*2)-1
+        self.activation = 0.0
+        self.index = index
+
+
+    def add_out_connection(self,out_neuron_index):
+        self.out_connections.append(out_neuron_index)
+        self.out_weights.append((random.random()*2)-1)
+
+    def add_in_connection(self,in_neuron_index):
+        self.in_connnections.append(in_neuron_index)
+
+    def f_feed(self):#feed activation into out neurons
+        for out_neuron_weight_index in range(n_out_connections):
+            neurons_add_list[self.out_connections[out_neuron_weight_index]]+=self.activation*self.out_weights[out_neuron_weight_index]
+
+    def find_weight(self,out_index):#find the weight of a particular out connection
+        return self.out_weights[self.out_connections.index(out_index)]
+
+
+
+
+
+
+neurons = [Neuron( random.sample(range(n_inputs+n_mesh_neurons+n_outputs),n_in_connections) , random.sample(range(n_mesh_neurons+n_outputs),n_out_connections) , neuron , False) for neuron in range(n_inputs+n_mesh_neurons+n_outputs)] #list of all Neuron objects in network
+#input neurons are first chunk of neurons in list
+#output neurons are second chunk of neurons in list
+#mesh neurons are last chunk of neurons in list
+
+#adds out connections to neurons from other neurons' in connections
+for neuron in neurons[n_inputs:]:
+    for neuron_in_connection in neuron.in_connnections:
+        neurons[neuron_in_connection].add_out_connection(neuron.index)
+#adds in connections to neurons from other neurons' out connections
+for neuron in neurons:
+    for neuron_out_connection in neuron.out_connections:
+        neurons[neuron_out_connection].add_in_connection(neuron.index)
+#gets rid of in connections into input neurons
+for input_neuron in neurons[:n_inputs]:
+    input_neuron.in_connnections = []
+
+
+
+#forward prop and training
+neuron_activation_history = [[0.0 for neuron in range(n_inputs+n_outputs+n_mesh_neurons)] for step in range(n_back_steps+1)]
+#fix goal outputs
+goal_outputs = [[1.0 for goal_output in range(n_outputs)] for back_step in range(n_back_steps+1)]# indexed [back_step][output_index]
+for step in range(n_steps):
+    neurons_add_list = [0.0 for i in range(n_outputs+n_mesh_neurons)]
+    #fix inputs
+    for input_neuron in neurons[:n_inputs]:
+        input_neuron.activation = 0.0
+    for neuron in neurons:
+        neuron.f_feed()
+    for neuron in neurons:
+        neuron.activation = sigmoid(neurons_add_list[neuron.index-n_inputs]+neuron.bias)
+    neuron_activation_history[(step+1)%(n_back_steps+1)] = [neuron.activation for neuron in neurons]
+
+    #training
+    if step%n_back_steps == 0:
+        print("training error ",step)
+        error = 0.0
+        active_neuron_indices = list(range(n_inputs, n_inputs + n_outputs))
+        z_values_derivatives = [[0.0 for neuron in range(n_outputs + n_mesh_neurons)] for back_step in range(n_back_steps)]
+        for back_step in range(n_back_steps-1):
+            old_active_indices = active_neuron_indices
+            active_neuron_indices = active_neuron_indices[:n_outputs]
+            for output_index in range(n_inputs,n_inputs+n_outputs):
+                z_values_derivatives[-1-back_step][output_index-n_inputs]+=(neuron_activation_history[-1-back_step][output_index]-goal_outputs[-1-back_step][output_index-n_inputs])*deriv_sigmoid(neuron_activation_history[-1-back_step][output_index])
+                error+=abs(neuron_activation_history[-1-back_step][output_index]-goal_outputs[-1-back_step][output_index-n_inputs])
+            for active_neuron_index in old_active_indices:
+                for in_connection in neurons[active_neuron_index].in_connnections:
+                    active_neuron_indices.append(in_connection)
+                    if in_connection>=n_inputs:
+                        z_values_derivatives[-2-back_step][in_connection-n_inputs]+=z_values_derivatives[-1-back_step][active_neuron_index-n_inputs]*neurons[in_connection].find_weight(active_neuron_index)*deriv_sigmoid(neuron_activation_history[-2-back_step][in_connection])
+        for back_step in range(n_back_steps):
+            for neuron in neurons[n_inputs:]:
+                neuron.bias-=z_values_derivatives[-1-back_step][neuron.index-n_inputs]*learning_rate
+                for in_connection in neuron.in_connnections:
+                    neurons[in_connection].out_weights[neurons[in_connection].out_connections.index(neuron.index)]-=(z_values_derivatives[-1-back_step][neuron.index-n_inputs]*neuron_activation_history[-2-back_step][in_connection]+(neurons[in_connection].out_weights[neurons[in_connection].out_connections.index(neuron.index)]*weight_penalty_rate))*learning_rate
+        print(error,"\n")
